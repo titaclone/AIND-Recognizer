@@ -77,24 +77,67 @@ class SelectorBIC(ModelSelector):
         warnings.filterwarnings("ignore", category=DeprecationWarning)
 
         # TODO implement model selection based on BIC scores
-        raise NotImplementedError
+        #raise NotImplementedError
+
+        # initialise with defaut value
+        bn = self.n_constant
+        bic = math.inf
+
+        try:
+            # n between self.min_n_components and self.max_n_components
+            for n in range(self.min_n_components, self.max_n_components+1):   
+                # LogL : log likelihood of fitted model
+                base_model = self.base_model(n)
+                logL = base_model.score(self.X, self.lengths)
+                # p : number of parameters
+                p = n**2 + 2*n*base_model.n_features - 1
+                # bic = 2 * logL + p * logN
+                score = 2*logL + p*(math.log(n))
+                if score < bic:
+                    bn = n
+                    bic = score
+        except:
+            if self.verbose:
+                print("failure")
+        return self.base_model(bn)
 
 
 class SelectorDIC(ModelSelector):
-    ''' select best model based on Discriminative Information Criterion
-
-    Biem, Alain. "A model selection criterion for classification: Application to hmm topology optimization."
-    Document Analysis and Recognition, 2003. Proceedings. Seventh International Conference on. IEEE, 2003.
-    http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.58.6208&rep=rep1&type=pdf
-    https://pdfs.semanticscholar.org/ed3d/7c4a5f607201f3848d4c02dd9ba17c791fc2.pdf
-    DIC = log(P(X(i)) - 1/(M-1)SUM(log(P(X(all but i))
-    '''
-
+    
     def select(self):
         warnings.filterwarnings("ignore", category=DeprecationWarning)
 
         # TODO implement model selection based on DIC scores
-        raise NotImplementedError
+        #raise NotImplementedError        
+
+        # initialize 
+        bn = self.n_constant
+        dic = -math.inf
+        logsL = list()
+
+        try:
+            for n in range(self.min_n_components, self.max_n_components + 1):
+                # List of LogL
+                base_model = self.base_model(n)
+                logsL.append(base_model.score(self.X, self.lengths))
+
+            # Total words
+            M = self.max_n_components - self.min_n_components + 1
+            logL_sum = sum(logsL)
+
+            # DIC = log(P(X(i)) - 1/(M-1)SUM(log(P(X(all but i))
+            for n in range(self.min_n_components, self.max_n_components + 1):
+                logL = logsL[n - self.min_n_components]
+                logL_bar = logL_sum - logL
+                score = logL - (logL_bar / (M-1))
+                if score > dic:
+                    dic = score
+                    bn = n
+        except: 
+            if self.verbose:
+                print("failure")
+        return self.base_model(bn)
+
 
 
 class SelectorCV(ModelSelector):
@@ -106,4 +149,28 @@ class SelectorCV(ModelSelector):
         warnings.filterwarnings("ignore", category=DeprecationWarning)
 
         # TODO implement model selection using CV
-        raise NotImplementedError
+        #raise NotImplementedError
+
+        best_score = -math.inf
+        bn = self.n_constant
+        splits = KFold()
+
+        try:
+            for n in range(self.min_n_components, self.max_n_components+1):
+                folds = None
+                for train_split, test_split in splits.split(self.sequences):  
+                    train, train_len = combine_sequences(train_split, self.sequences)
+                    test, test_len = combine_sequences(test_split, self.sequences)
+                    model = GaussianHMM(n_components=n, covariance_type="diag", n_iter=1000, random_state=self.random_state, verbose=False).fit(train, train_len)
+                    folds.append(model.score(test, test_len))
+                mean = np.mean(folds)
+                if mean > best_score:
+                    best_score = mean
+                    bn = n
+        except :
+            if self.verbose:
+                print("failure")
+
+        return self.base_model(bn)
+
+         
